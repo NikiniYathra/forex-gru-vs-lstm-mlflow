@@ -1,0 +1,18 @@
+# Virtual environment
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# MLflow local storage (recreated by running the scripts)
+mlflow.db
+mlruns/
+
+# Large generated arrays (recreated by prepare_sequences.py)
+*.npz
+
+# Editor and OS files
+.vscode/
+.DS_Store
+Thumbs.db
