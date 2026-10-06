@@ -1,0 +1,17 @@
+name: eurusd_daily
+data:
+  path: data/raw/eurusd_daily.csv
+  format: yfinance
+  max_gap: null          # daily data has weekends, so no gap check
+clean:
+  bad_tick_tol: 0.10     # Low/High more than 10% outside Open/Close is a bad tick
+features: [ret, hl_range, vol_short]
+vol_window: 5
+target:
+  kind: return           # return | close
+  horizon: 1
+lookback: 30
+split:
+  train: 0.70
+  val: 0.15              # test = the remainder
+scaler: standard         # standard | minmax

@@ -1,0 +1,17 @@
+name: eurusd_m1
+data:
+  path: data/raw/EURUSD1.csv
+  format: forexsb
+  max_gap: 5min          # windows spanning a longer gap are excluded
+clean:
+  bad_tick_tol: 0.01
+features: [ret, hl_range, oc_change, vol_short, log_volume, hour_sin, hour_cos]
+vol_window: 30
+target:
+  kind: return
+  horizon: 1
+lookback: 60
+split:
+  train: 0.70
+  val: 0.15
+scaler: standard

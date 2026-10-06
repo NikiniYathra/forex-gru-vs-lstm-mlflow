@@ -1,0 +1,12 @@
+experiment: m1-tune
+folder: data/processed/eurusd_m1_standard_lb60_return1_dd765e
+mode: tune                 # validation only; the test set is not evaluated
+models: [gru, lstm]
+seeds: [1, 2]
+fixed:
+  batch_size: 512
+  epochs: 20
+  patience: 4
+grid:
+  hidden_size: [32, 64]
+  lr: [0.001, 0.0003]
