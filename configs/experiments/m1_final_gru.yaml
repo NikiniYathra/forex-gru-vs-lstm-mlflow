@@ -1,0 +1,12 @@
+experiment: m1-final
+folder: data/processed/eurusd_m1_standard_lb60_return1_dd765e
+mode: final                # evaluates the test set at the end of each run
+models: [gru]
+seeds: [11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+fixed:
+  batch_size: 512
+  epochs: 20
+  patience: 4
+grid:
+  hidden_size: [64]
+  lr: [0.0003]

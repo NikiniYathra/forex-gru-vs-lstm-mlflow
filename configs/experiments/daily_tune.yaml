@@ -1,0 +1,12 @@
+experiment: daily-tune
+folder: data/processed/eurusd_daily_standard_lb30_return1_5fc0fb
+mode: tune                 # validation only; the test set is not evaluated
+models: [gru, lstm]
+seeds: [1, 2, 3]
+fixed:
+  batch_size: 128
+  epochs: 30
+  patience: 5
+grid:
+  hidden_size: [32, 64]
+  lr: [0.001, 0.0003]

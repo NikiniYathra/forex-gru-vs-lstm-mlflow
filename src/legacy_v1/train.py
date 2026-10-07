@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from models import GRUModel, LSTMModel
+from src.models.networks import GRUModel, LSTMModel
 
 # ---------- Settings (can be overridden from the command line) ----------
 parser = argparse.ArgumentParser()

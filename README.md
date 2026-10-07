@@ -1,8 +1,82 @@
-# EUR/USD next-day return: GRU vs LSTM (PyTorch + MLflow)
+# EUR/USD forecasting: GRU vs LSTM with PyTorch and MLflow
 
-Compares a GRU and an LSTM on daily EUR/USD returns, with every run tracked in MLflow.
+A reproducible comparison of a GRU and an LSTM that predict the next-minute EUR/USD return, with every experiment
+tracked in MLflow. The main dataset is 200,000 one-minute bars. A daily dataset (2010 to 2026) is used for
+exploration.
 
-## Setup (Windows, PowerShell)
+**Key finding:** neither model beats the "predict no change" baseline on the held-out test period (test RMSE ratio
+about 1.001 for both), and the GRU-vs-LSTM difference cannot be distinguished from zero once uncertainty from the
+test period is taken into account. The project's value is the evaluation process, which is built to avoid fooling
+itself.
+
+## What the project does
+- Loads and checks price data (missing values, duplicates, time gaps, impossible bars, bad ticks).
+- Builds causal features and a next-step target, with a chronological train/validation/test split.
+- Trains GRU and LSTM models under identical conditions (same data, seeds, early stopping, search grid).
+- Selects hyperparameters on **validation only**, freezes the choice in git, then evaluates the test set once.
+- Compares the models over 10 fresh seeds and with a block bootstrap over the test period.
+- Logs parameters, metrics, plots, configs, dataset checksums, and packaged models to MLflow.
+
+## Method
+- **Data:** forexsb 1-minute bars (`data/raw/EURUSD1.csv`, 2026-03-24 to 2026-10-05). Daily data from Yahoo
+  Finance (`data/raw/eurusd_daily.csv`).
+- **Target:** next-bar log return. A `close` target is implemented but was not evaluated.
+- **Features (1-minute):** log return, (high-low)/close, (close-open)/open, 30-bar rolling volatility, log tick
+  volume, sine and cosine of the time of day. All use only current and earlier bars.
+- **Split:** chronological 70/15/15 (140,000 / 30,000 / 30,000 rows). Test period: 2026-09-06 to 2026-10-05.
+- **Leakage controls:** scalers are fitted on training rows only; every window and its label bar lie inside one
+  split; windows that span a time gap longer than 5 minutes (weekends, missing data) are excluded; automatic
+  checks in `src/data/check_dataset.py` verify window contents, labels, gaps, and split boundaries.
+- **Windows:** 60-bar look-back, built lazily in batches, so 200,000 rows need little memory.
+- **Models:** one recurrent layer (GRU or LSTM), dropout 0.2 on the last hidden state, a linear output. Mean
+  squared error loss, Adam, gradient clipping at 1.0, batch size 512, early stopping on validation MSE
+  (patience 4) with the best weights restored. CUDA is used if available, otherwise the CPU.
+- **Baselines and metrics:** the headline metric is RMSE divided by the RMSE of predicting zero (1.0 = no better
+  than no change). Also reported: persistence and train-mean baselines, the correlation between predicted and
+  actual changes, and direction accuracy minus the majority-class rate.
+- **Selection protocol:** the rule is written in code (`summarize_experiment.py`): lowest mean validation ratio,
+  ties broken by direction edge, chosen separately for each model. The choices were committed to git
+  (`dc6d791`) before the test set was evaluated. Final runs use 10 seeds (11 to 20) that were not used for
+  selection (tuning used seeds 1 and 2).
+
+## Results (1-minute data, 10 seeds per model)
+| | GRU (hidden 64, lr 0.0003) | LSTM (hidden 64, lr 0.001) |
+|---|---|---|
+| Parameters | 14,081 | 18,753 |
+| Validation RMSE / baseline | 0.9994 +/- 0.0002 | 0.9992 +/- 0.0003 |
+| **Test RMSE / baseline** | **1.0010 +/- 0.0002** | **1.0015 +/- 0.0005** |
+| Seeds beating the baseline on test | 0 of 10 | 0 of 10 |
+| Test correlation (predicted vs actual change) | -0.009 | -0.004 |
+| Test direction accuracy minus majority rate | +0.0037 | +0.0038 |
+
+- Validation looked slightly better than the baseline for every seed; on the test period it did not. The
+  validation advantage came from selecting configurations and epochs on that same period.
+- Block bootstrap over the test period (seed-averaged predictions, 1-day blocks): the 95% interval for
+  GRU minus LSTM is [-0.00108, +0.00047], which includes zero. The GRU beats the LSTM in 74% of resamples.
+  The GRU beats the baseline in 0.8% of resamples and the LSTM in 2.4%.
+- Hidden size (16, 32, 64) and learning rate (0.0003, 0.001, 0.003) changed validation results by less than
+  0.001 on the daily data and 0.0004 on the minute data.
+- Daily data: validation-selected models stop improving after 1 to 3 epochs, so there is nothing learnable at
+  that scale with these features.
+
+Details are in `reports/` and in MLflow (experiments `m1-tune`, `m1-final`, `daily-tune`).
+
+## Project structure
+```
+configs/                  preprocessing configs (m1.yaml, daily.yaml) and experiment grids (experiments/)
+data/raw/                 original downloads, never edited
+data/processed/           regenerated by src.data.preprocess (ignored by git)
+src/data/                 loading, inspection, preprocessing, windowing, dataset checks
+src/models/               GRU and LSTM definitions (networks.py)
+src/training/             train_run.py (one run) and run_experiments.py (grids x seeds, resumable)
+src/evaluation/           summaries, final comparison, block bootstrap, packaging and the MLflow report run
+src/legacy_v1/            the original daily-data pipeline (tag v1-daily-baseline)
+models/, reports/         v1 weights and scalers (models/); summaries, charts, CSVs (reports/)
+runs/, mlflow.db          local run outputs and MLflow database (ignored by git)
+```
+`models/` at the project root holds old v1 files and is unrelated to `src/models/`.
+
+## Setup (Windows, PowerShell, Python 3.11)
 ```powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
@@ -10,36 +84,64 @@ python -m pip install --upgrade pip
 python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
 python -m pip install -r requirements.txt
 ```
+Run every command from the project root. For a CUDA build of PyTorch, use the selector at pytorch.org instead of
+the CPU line.
 
-## Run order (from the project root)
+## Reproduce the 1-minute experiments
 ```powershell
-python src\download_data.py        # yfinance -> data/raw/eurusd_daily.csv
-python src\clean_data.py           # fix bad ticks, drop Volume -> data/processed/eurusd_clean.csv
-python src\make_features.py        # features + next-day-return target
-python src\prepare_sequences.py    # 70/15/15 chronological split, scaling, 30-day windows
-python src\train.py --model gru --hidden_size 64 --lr 0.001 --seed 42
-python src\train.py --model lstm --hidden_size 64 --lr 0.001 --seed 42
-python src\summarize_runs.py       # all runs -> reports/run_summary.csv
-python src\compare_models.py       # GRU vs LSTM stats + reports/gru_vs_lstm.png
-mlflow ui --backend-store-uri sqlite:///mlflow.db   # browse runs at http://127.0.0.1:5000
+# 1. Inspect and preprocess (writes data/processed/eurusd_m1_standard_lb60_return1_<fingerprint>/)
+python -m src.data.inspect_data --path data\raw\EURUSD1.csv
+python -m src.data.preprocess --config configs\m1.yaml
+python -m src.data.check_dataset --folder data\processed\eurusd_m1_standard_lb60_return1_dd765e
+
+# 2. Tune on validation only (16 runs, about 1 to 2 hours on a laptop CPU)
+python -u -m src.training.run_experiments --grid configs\experiments\m1_tune.yaml
+python -m src.evaluation.summarize_experiment --experiment m1-tune
+
+# 3. Final runs: the test set is evaluated once per run (10 seeds per model, about 80 minutes)
+python -u -m src.training.run_experiments --grid configs\experiments\m1_final_gru.yaml
+python -u -m src.training.run_experiments --grid configs\experiments\m1_final_lstm.yaml
+
+# 4. Compare, bootstrap, package, and create the MLflow report run
+python -m src.evaluation.compare_final
+python -m src.evaluation.bootstrap_test | Tee-Object -FilePath reports\m1-final_bootstrap.txt
+python -m src.evaluation.package_and_report
+
+# 5. Browse everything
+mlflow ui --backend-store-uri sqlite:///mlflow.db        # http://127.0.0.1:5000
 ```
+The runner skips runs that already finished, so an interrupted experiment can be restarted with the same command.
+If the fingerprint in the processed-data folder name differs on your machine, use the folder name printed by
+`preprocess` in the grid files and in the `check_dataset` command.
 
-## Design choices
-- Inputs are returns and volatility features, not raw prices. Target is the next-day log return.
-- Chronological split (never shuffled). Scalers are fitted on the training rows only, to avoid leakage.
-- Hyperparameters were chosen on validation results only. The test set is a final check.
-- Every model is compared with an "always predict 0" baseline (ratio of RMSEs, 1.0 = same).
+A single training run:
+```powershell
+python -m src.training.train_run --folder data\processed\eurusd_m1_standard_lb60_return1_dd765e --model gru --mode tune --hidden_size 64 --lr 0.0003 --batch_size 512 --seed 1
+```
+`--mode tune` never evaluates the test set; `--mode final` does. Other options: `--num_layers`, `--dropout`,
+`--epochs`, `--patience`, `--loss mse|huber`, `--grad_clip`, `--device`, `--log_model`.
+Preprocessing options (`--scaler standard|minmax`, `--lookback`, `--target_kind return|close`, `--horizon`) are on
+`python -m src.data.preprocess`.
 
-## Results (hidden 64, lr 0.001, batch 64, 6 seeds each)
-| Metric | GRU | LSTM |
-|---|---|---|
-| Validation RMSE / baseline | 0.9985 | 0.9993 |
-| Test RMSE / baseline | 1.0029 | 1.0017 |
-| Test directional accuracy | 0.510 | 0.530 |
+The daily data follows the same path with `configs\daily.yaml` and `configs\experiments\daily_tune.yaml`.
+Re-running `src.data.download_data` fetches data up to today, so it will not reproduce the committed daily file.
 
-No difference was statistically convincing (Welch t-test p-values 0.06 to 0.10), and neither model beat the
-baseline on the test period. Hidden size and learning rate made little difference.
+## MLflow demo (about 10 minutes)
+1. Open the experiment `m1-final`: two configuration runs, each containing 10 seeds, plus the report run.
+2. Open `REPORT_GRU_vs_LSTM_final`: the description note, summary metrics, and the `report` artifacts folder
+   (comparison chart, run table, bootstrap results, configs). Both packaged models are stored there.
+3. Tick several GRU and LSTM seeds and click Compare; plot `test_rmse_vs_baseline`.
+4. Open one seed run: parameters (hyperparameters, dataset, features, scaler, data checksum, git commit),
+   per-epoch loss curves, plots, and the saved weights.
+5. Open `m1-tune` to show how the configurations were selected on validation only.
 
-## Notes
-- Data: Yahoo Finance via yfinance. One bad `Low` value (2012-01-27) is repaired in `clean_data.py`.
-- CPU-only PyTorch; the models are small and train in about a minute.
+## Limitations
+- The 1-minute data covers about 6.5 months, so it represents one market regime; the test set is one month.
+- One currency pair and one prediction horizon (1 bar ahead); no transaction costs or trading simulation.
+- The seed comparison measures initialization randomness only; the bootstrap addresses test-period uncertainty.
+- 1-minute returns have very heavy tails (scaled values up to about 40 standard deviations); clipping and
+  Huber loss are available but were not evaluated. MinMaxScaler and the `close` target are implemented but
+  were not evaluated.
+- Walk-forward evaluation across several periods would be a stronger test and was not done.
+- Trained on a CPU; the LSTM has about 33% more parameters than the GRU at the same hidden size.
+- The daily Yahoo `Open` is not a real open after 2010, so the daily features exclude it (v1 used it).

@@ -1,0 +1,21 @@
+{
+  "experiment": "daily-tune",
+  "best": {
+    "gru": {
+      "model": "gru",
+      "hidden_size": 64,
+      "num_layers": 1,
+      "dropout": 0.2,
+      "lr": 0.001,
+      "batch_size": 128
+    },
+    "lstm": {
+      "model": "lstm",
+      "hidden_size": 32,
+      "num_layers": 1,
+      "dropout": 0.2,
+      "lr": 0.001,
+      "batch_size": 128
+    }
+  }
+}
