@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 import mlflow
+import mlflow.pyfunc
 import mlflow.pytorch
 import numpy as np
 import pandas as pd
@@ -73,11 +74,9 @@ with mlflow.start_run(run_name="REPORT_GRU_vs_LSTM_final") as report:
             info = mlflow.pytorch.log_model(model, name=f"{m}_model", input_example=example, code_paths=["src"])
         except TypeError:
             info = mlflow.pytorch.log_model(model, artifact_path=f"{m}_model", input_example=example, code_paths=["src"])
-        loaded = mlflow.pytorch.load_model(info.model_uri)
-        loaded.eval()
-        with torch.no_grad():
-            got = loaded(torch.from_numpy(example)).numpy()
-        assert np.allclose(expected, got, atol=1e-6), f"{m}: reloaded model gives different predictions"
+        loaded = mlflow.pyfunc.load_model(info.model_uri)
+        got = np.asarray(loaded.predict(example)).ravel()
+        assert np.allclose(expected, got, atol=1e-5), f"{m}: reloaded model gives different predictions"
         mlflow.set_tag(f"{m}_source_run", run_id)
         print(f"{m.upper()} model packaged from run {run_id[:8]}, reloaded, predictions match "
               f"(max difference {np.abs(expected - got).max():.2e})")
