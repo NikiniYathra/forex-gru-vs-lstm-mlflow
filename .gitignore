@@ -17,3 +17,9 @@ mlruns/
 .DS_Store
 Thumbs.db
 runs/
+
+# Regenerable processed data (rebuilt by python -m src.data.preprocess)
+data/processed/*/
+
+# Console logs (the results are in MLflow and the CSV summaries)
+reports/*_log.txt
