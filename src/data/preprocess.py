@@ -11,7 +11,7 @@ import pandas as pd
 import yaml
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
-from data_io import load_ohlcv
+from src.data.data_io import load_ohlcv
 
 SCALERS = {"standard": StandardScaler, "minmax": MinMaxScaler}
 

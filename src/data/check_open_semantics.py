@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from data_io import load_ohlcv
+from src.data.data_io import load_ohlcv
 
 df = load_ohlcv("data/raw/eurusd_daily.csv", "yfinance")
 year = df.index.year

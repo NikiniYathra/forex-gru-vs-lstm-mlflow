@@ -7,7 +7,7 @@ import mlflow
 import numpy as np
 import yaml
 
-from train_run import build_parser, train_one
+from src.training.train_run import build_parser, train_one
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--grid", required=True, help="e.g. configs/experiments/daily_tune.yaml")

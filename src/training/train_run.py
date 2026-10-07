@@ -17,8 +17,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from models import GRUModel, LSTMModel
-from windows import get_device, load_split, make_loader
+from src.models.networks import GRUModel, LSTMModel
+from src.data.windows import get_device, load_split, make_loader
 
 
 def git_commit():

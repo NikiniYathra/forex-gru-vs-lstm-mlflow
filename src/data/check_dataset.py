@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from windows import get_device, load_split, make_loader
+from src.data.windows import get_device, load_split, make_loader
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--folder", required=True, help="a folder inside data/processed")

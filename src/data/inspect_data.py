@@ -3,7 +3,7 @@ import argparse
 import numpy as np
 import pandas as pd
 
-from data_io import load_ohlcv
+from src.data.data_io import load_ohlcv
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--path", default="data/raw/eurusd_daily.csv")
